@@ -12,4 +12,8 @@ export class EscrowRepository extends BaseRepository {
   findByOrder(orderId: string): Promise<EscrowOnChain | null> {
     return this.prisma.escrowOnChain.findUnique({ where: { orderId } });
   }
+
+  findByContractId(contractId: string): Promise<EscrowOnChain | null> {
+    return this.prisma.escrowOnChain.findFirst({ where: { contractId } });
+  }
 }

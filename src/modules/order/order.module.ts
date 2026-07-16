@@ -8,5 +8,6 @@ import { EscrowModule } from '../escrow/escrow.module';
   imports: [EscrowModule],
   controllers: [OrderController],
   providers: [OrderService, OrderRepository],
+  exports: [OrderRepository],
 })
 export class OrderModule {}
