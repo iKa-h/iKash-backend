@@ -144,7 +144,8 @@ export function providerUsesIban(provider: PaymentProviderLike): boolean {
   }
 
   const requirement = getAccountIdentifierRequirement(provider.metadata);
-  const label = String(requirement?.label ?? '').toLowerCase();
+  const labelValue = requirement?.label;
+  const label = typeof labelValue === 'string' ? labelValue.toLowerCase() : '';
   return label.includes('iban');
 }
 
@@ -155,14 +156,16 @@ export function getMetadataValidationRegex(
   return typeof regex === 'string' && regex.length > 0 ? regex : undefined;
 }
 
-export const NAMED_PROVIDER_VALIDATORS: Record<string, AccountIdentifierValidator> =
-  {
-    paypal: (accountIdentifier) => isValidEmail(accountIdentifier),
-    'sinpe móvil': (accountIdentifier) => isValidSinpePhone(accountIdentifier),
-    'sinpe movil': (accountIdentifier) => isValidSinpePhone(accountIdentifier),
-    pix: (accountIdentifier) => isValidPixKey(accountIdentifier),
-    'iban bank': (accountIdentifier) => isValidIban(accountIdentifier),
-  };
+export const NAMED_PROVIDER_VALIDATORS: Record<
+  string,
+  AccountIdentifierValidator
+> = {
+  paypal: (accountIdentifier) => isValidEmail(accountIdentifier),
+  'sinpe móvil': (accountIdentifier) => isValidSinpePhone(accountIdentifier),
+  'sinpe movil': (accountIdentifier) => isValidSinpePhone(accountIdentifier),
+  pix: (accountIdentifier) => isValidPixKey(accountIdentifier),
+  'iban bank': (accountIdentifier) => isValidIban(accountIdentifier),
+};
 
 export function validateByProviderType(
   accountIdentifier: string,
