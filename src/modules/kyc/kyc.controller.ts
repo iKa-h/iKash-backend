@@ -9,7 +9,7 @@ import {
   Logger,
   Get,
   Query,
-  UnauthorizedException,
+  
   type RawBodyRequest,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -61,14 +61,14 @@ export class KycController {
     @Body() payload: Record<string, unknown>,
   ) {
     if (!this.webhookSecret) {
-      this.logger.error('[WEBHOOK] DIDIT_WEBHOOK_SECRET is not configured');
-      throw new UnauthorizedException('Webhook secret not configured');
+      this.logger.error({ event: 'webhook.secret.missing' });
+      throw new AppException(ErrorCode.KYC_WEBHOOK_SECRET_MISSING, 'DIDIT_WEBHOOK_SECRET is not configured');
     }
 
     const rawBodyBuffer = req.rawBody;
     if (!rawBodyBuffer) {
-      this.logger.warn('[WEBHOOK] Missing raw body - verification failed');
-      throw new UnauthorizedException('Missing request body');
+      this.logger.warn({ event: 'webhook.body.missing' });
+      throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Missing request body');
     }
 
     const sigToVerify = signatureV2 || signatureV1;
@@ -80,8 +80,8 @@ export class KycController {
         .digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(sigToVerify), Buffer.from(expectedSignature))) {
-        this.logger.warn('[WEBHOOK] Signature verification failed');
-        throw new UnauthorizedException('Invalid webhook signature');
+        this.logger.warn({ event: 'webhook.signature.invalid', signaturePrefix: sigToVerify.substring(0, 4) + '***' });
+        throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Invalid webhook signature');
       }
     } else if (signatureSimple) {
       const sessionId = (payload?.session_id as string) || '';
@@ -94,16 +94,17 @@ export class KycController {
         .digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(signatureSimple), Buffer.from(expectedSimple))) {
-        this.logger.warn('[WEBHOOK] Simple signature verification failed');
-        throw new UnauthorizedException('Invalid webhook signature');
+        this.logger.warn({ event: 'webhook.signature.invalid', type: 'simple' });
+        throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Invalid webhook signature');
       }
     } else {
-      this.logger.warn('[WEBHOOK] No signature header present');
-      throw new UnauthorizedException('Missing signature header');
+      this.logger.warn({ event: 'webhook.signature.missing' });
+      throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Missing signature header');
     }
 
-    this.logger.log('[WEBHOOK] Signature verified successfully');
+    this.logger.log({ event: 'webhook.signature.verified' });
     await this.kycService.processWebhookEvent(payload);
     return { received: true };
   }
 }
+
