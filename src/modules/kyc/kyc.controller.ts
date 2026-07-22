@@ -68,7 +68,7 @@ export class KycController {
     const rawBodyBuffer = req.rawBody;
     if (!rawBodyBuffer) {
       this.logger.warn({ event: 'webhook.body.missing' });
-      throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Missing request body');
+      throw new AppException(ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE, 'Missing request body');
     }
 
     const sigToVerify = signatureV2 || signatureV1;
@@ -81,7 +81,7 @@ export class KycController {
 
       if (!crypto.timingSafeEqual(Buffer.from(sigToVerify), Buffer.from(expectedSignature))) {
         this.logger.warn({ event: 'webhook.signature.invalid', signaturePrefix: sigToVerify.substring(0, 4) + '***' });
-        throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Invalid webhook signature');
+        throw new AppException(ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE, 'Invalid webhook signature');
       }
     } else if (signatureSimple) {
       const sessionId = (payload?.session_id as string) || '';
@@ -95,11 +95,11 @@ export class KycController {
 
       if (!crypto.timingSafeEqual(Buffer.from(signatureSimple), Buffer.from(expectedSimple))) {
         this.logger.warn({ event: 'webhook.signature.invalid', type: 'simple' });
-        throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Invalid webhook signature');
+        throw new AppException(ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE, 'Invalid webhook signature');
       }
     } else {
       this.logger.warn({ event: 'webhook.signature.missing' });
-      throw new AppException(ErrorCode.KYC_WEBHOOK_SIGNATURE_INVALID, 'Missing signature header');
+      throw new AppException(ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE, 'Missing signature header');
     }
 
     this.logger.log({ event: 'webhook.signature.verified' });
