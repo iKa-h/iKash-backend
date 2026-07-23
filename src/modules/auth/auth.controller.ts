@@ -1,4 +1,5 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+﻿import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { CreateAuthChallengeDto } from './dto/create-auth-challenge.dto';
@@ -20,11 +21,16 @@ export class AuthController {
 
   /**
    * Step 2: verifies the signed challenge and emits a temporary JWT only
-   * after the signature proves ownership of the wallet.
+   * after the signature proves ownership of the wallet. Passes request
+   * context (IP, user agent) through for audit logging.
    */
   @Post('login')
   @UseGuards(AuthRateLimitGuard)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    const ctx = {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+    return this.authService.login(dto, ctx);
   }
 }
