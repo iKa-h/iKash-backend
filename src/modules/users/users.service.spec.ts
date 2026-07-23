@@ -4,7 +4,7 @@ import { FileStorageService } from '../file-storage/file-storage.service';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
+import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -33,7 +33,10 @@ describe('UsersService', () => {
         { provide: PrismaService, useValue: {} },
         { provide: AuthService, useValue: {} },
         { provide: FileStorageService, useValue: mockFileStorageService },
-        { provide: PaymentMethodValidatorService, useValue: { validate: jest.fn() } },
+        {
+          provide: PaymentMethodsService,
+          useValue: { create: jest.fn() },
+        },
       ],
     }).compile();
 

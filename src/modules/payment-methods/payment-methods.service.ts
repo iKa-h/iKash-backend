@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaginationDto } from '../../common/pagination.dto';
@@ -7,28 +7,44 @@ import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { PaymentMethodValidatorService } from './payment-method-validator.service';
 import { PaymentMethodsRepository } from './payment-methods.repository';
+import { maskAccountIdentifier } from './utils/mask-account-identifier.util';
 
 @Injectable()
 export class PaymentMethodsService {
+  private readonly logger = new Logger(PaymentMethodsService.name);
+
   constructor(
     private readonly repo: PaymentMethodsRepository,
     private readonly prisma: PrismaService,
     private readonly validator: PaymentMethodValidatorService,
   ) {}
 
-  async create(dto: CreatePaymentMethodDto): Promise<PaymentMethod> {
+  async create(
+    userId: string,
+    dto: CreatePaymentMethodDto,
+  ): Promise<PaymentMethod> {
     const provider = await this.getProviderOrThrow(dto.providerId);
     this.validator.validate(provider, dto.accountIdentifier);
 
-    return this.repo.create({
-      userId: dto.userId,
+    const created = (await this.repo.create({
+      userId,
       providerId: dto.providerId,
       type: provider.type,
       accountIdentifier: dto.accountIdentifier.trim(),
       beneficiaryName: dto.beneficiaryName,
       identificationNumber: dto.identificationNumber,
       description: dto.description,
-    }) as Promise<PaymentMethod>;
+    })) as PaymentMethod;
+
+    this.logger.log({
+      event: 'paymentMethod.created',
+      userId,
+      paymentMethodId: created.paymentId,
+      providerId: created.providerId,
+      accountIdentifier: maskAccountIdentifier(created.accountIdentifier),
+    });
+
+    return created;
   }
 
   list(p: PaginationDto): Promise<PaymentMethod[]> {
@@ -71,7 +87,17 @@ export class PaymentMethodsService {
       data.type = provider.type;
     }
 
-    return this.repo.update(id, data) as Promise<PaymentMethod>;
+    const updated = (await this.repo.update(id, data)) as PaymentMethod;
+
+    this.logger.log({
+      event: 'paymentMethod.updated',
+      userId: updated.userId,
+      paymentMethodId: updated.paymentId,
+      providerId: updated.providerId,
+      accountIdentifier: maskAccountIdentifier(updated.accountIdentifier),
+    });
+
+    return updated;
   }
 
   remove(id: string): Promise<PaymentMethod> {

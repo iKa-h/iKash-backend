@@ -9,9 +9,10 @@ import {
 
 @Injectable()
 export class PaymentMethodValidatorService {
-  private readonly namedValidators = new Map<string, AccountIdentifierValidator>(
-    Object.entries(NAMED_PROVIDER_VALIDATORS),
-  );
+  private readonly namedValidators = new Map<
+    string,
+    AccountIdentifierValidator
+  >(Object.entries(NAMED_PROVIDER_VALIDATORS));
 
   registerValidator(
     providerName: string,

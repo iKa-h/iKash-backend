@@ -91,9 +91,7 @@ describe('account identifier validators', () => {
     });
 
     it('accepts random EVP keys', () => {
-      expect(isValidPixKey('550e8400-e29b-41d4-a716-446655440000')).toBe(
-        true,
-      );
+      expect(isValidPixKey('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
     });
 
     it('rejects unsupported values', () => {
@@ -110,10 +108,7 @@ describe('account identifier validators', () => {
         ),
       ).toBe(true);
       expect(
-        isValidAccountIdentifier(
-          'bad-value',
-          provider('PayPal', 'PLATFORM'),
-        ),
+        isValidAccountIdentifier('bad-value', provider('PayPal', 'PLATFORM')),
       ).toBe(false);
     });
 
@@ -158,10 +153,7 @@ describe('account identifier validators', () => {
         ),
       ).toBe(true);
       expect(
-        isValidAccountIdentifier(
-          '123',
-          provider('Pago Movil', 'MOBILE', 'VE'),
-        ),
+        isValidAccountIdentifier('123', provider('Pago Movil', 'MOBILE', 'VE')),
       ).toBe(false);
     });
 

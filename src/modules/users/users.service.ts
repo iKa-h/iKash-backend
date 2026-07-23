@@ -13,7 +13,7 @@ import {
 } from '../file-storage/file-storage.service';
 import { AppException, ErrorCode } from '../../common/errors';
 import { AppUser, Waitlist } from '@prisma/client';
-import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
+import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 
 export interface AliasAvailability {
   available: boolean;
@@ -36,7 +36,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly fileStorageService: FileStorageService,
-    private readonly paymentMethodValidator: PaymentMethodValidatorService,
+    private readonly paymentMethodsService: PaymentMethodsService,
   ) {}
 
   async getOrCreateAccount(publicKey: string): Promise<AppUser> {
@@ -91,29 +91,12 @@ export class UsersService {
     void accountNumber;
 
     if (providerId && accountIdentifier) {
-      const provider = await this.prisma.payment_provider.findUnique({
-        where: { provider_id: providerId },
-      });
-
-      if (!provider) {
-        throw new AppException(
-          ErrorCode.PAYMENT_PROVIDER_NOT_FOUND,
-          'Payment provider not found',
-        );
-      }
-
-      this.paymentMethodValidator.validate(provider, accountIdentifier);
-
-      await this.prisma.paymentMethod.create({
-        data: {
-          userId,
-          providerId,
-          type: provider.type,
-          accountIdentifier: accountIdentifier.trim(),
-          identificationNumber,
-          beneficiaryName,
-          description,
-        },
+      await this.paymentMethodsService.create(userId, {
+        providerId,
+        accountIdentifier,
+        identificationNumber,
+        beneficiaryName,
+        description,
       });
     }
 

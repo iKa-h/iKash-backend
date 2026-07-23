@@ -64,7 +64,8 @@ describe('PaymentMethodValidatorService', () => {
       expect((error as AppException).getResponse()).toEqual({
         statusCode: 400,
         error: ErrorCode.INVALID_ACCOUNT_IDENTIFIER,
-        message: 'Invalid account identifier for the selected payment provider.',
+        message:
+          'Invalid account identifier for the selected payment provider.',
       });
     }
   });

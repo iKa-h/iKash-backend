@@ -60,8 +60,7 @@ describe('PaymentMethodsService', () => {
       });
 
       await expect(
-        service.create({
-          userId: 'user-1',
+        service.create('user-1', {
           providerId: 'provider-1',
           accountIdentifier: 'user@example.com',
         }),
@@ -85,8 +84,7 @@ describe('PaymentMethodsService', () => {
       prisma.payment_provider.findUnique.mockResolvedValue(paypalProvider);
 
       await expect(
-        service.create({
-          userId: 'user-1',
+        service.create('user-1', {
           providerId: 'provider-1',
           accountIdentifier: 'not-an-email',
         }),
