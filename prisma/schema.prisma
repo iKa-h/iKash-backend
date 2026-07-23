@@ -86,6 +86,20 @@ model EscrowOnChain {
   @@map("escrowonchain")
 }
 
+model BlockchainEventSync {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  eventKey       String   @unique @map("event_key")
+  contractId     String   @map("contract_id")
+  eventType      String   @map("event_type")
+  escrowId       String   @map("escrow_id")
+  transactionHash String?  @map("transaction_hash")
+  ledgerSequence Int?     @map("ledger_sequence")
+  eventIndex     Int?     @map("event_index")
+  processedAt    DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("blockchain_event_sync")
+}
+
 model ChatMessage {
   messageId String   @id @default(dbgenerated("gen_random_uuid()")) @map("message_id") @db.Uuid
   orderId   String   @map("order_id") @db.Uuid

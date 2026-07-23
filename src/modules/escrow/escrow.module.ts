@@ -10,6 +10,6 @@ import { FileStorageModule } from '../file-storage/file-storage.module';
   imports: [ConfigModule, FileStorageModule],
   controllers: [EscrowController],
   providers: [EscrowService, EscrowRepository, TrustlessWorkService],
-  exports: [EscrowService],
+  exports: [EscrowService, EscrowRepository, TrustlessWorkService],
 })
 export class EscrowModule {}
