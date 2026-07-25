@@ -64,9 +64,7 @@ export class AuthService {
    * Step 2 of wallet authentication: verifies the signed challenge and issues
    * a temporary JWT only if the signature proves ownership of the wallet.
    */
-  async login(
-    dto: LoginDto,
-  ): Promise<{ access_token: string; user: AppUser }> {
+  async login(dto: LoginDto): Promise<{ access_token: string; user: AppUser }> {
     const { publicKey, challenge, signature } = dto;
     this.assertValidPublicKey(publicKey);
 
