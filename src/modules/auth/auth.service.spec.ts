@@ -373,4 +373,27 @@ describe('AuthService', () => {
       });
     });
   });
+
+  describe('purgeExpiredChallenges', () => {
+    it('deletes expired challenges and used challenges older than retention threshold', async () => {
+      prismaMock.authChallenge.deleteMany.mockResolvedValueOnce({ count: 7 });
+
+      const res = await service.purgeExpiredChallenges(24);
+
+      expect(res).toEqual({ count: 7 });
+      expect(prismaMock.authChallenge.deleteMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { expiresAt: { lt: expect.any(Date) as unknown as Date } },
+            {
+              AND: [
+                { usedAt: { not: null } },
+                { usedAt: { lt: expect.any(Date) as unknown as Date } },
+              ],
+            },
+          ],
+        },
+      });
+    });
+  });
 });
