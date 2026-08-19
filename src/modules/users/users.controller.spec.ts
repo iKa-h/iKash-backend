@@ -16,6 +16,8 @@ describe('UsersController', () => {
     uploadProfilePicture: jest.Mock;
     findByPublicKey: jest.Mock;
     update: jest.Mock;
+    exportUserData: jest.Mock;
+    remove: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -23,6 +25,8 @@ describe('UsersController', () => {
       uploadProfilePicture: jest.fn(),
       findByPublicKey: jest.fn(),
       update: jest.fn(),
+      exportUserData: jest.fn(),
+      remove: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -191,6 +195,41 @@ describe('UsersController', () => {
         { alias: 'new-alias' },
         'user-1',
       );
+    });
+  });
+
+  describe('exportData', () => {
+    it('passes the authenticated user id to the export service', async () => {
+      mockUsersService.exportUserData.mockResolvedValue({ userId: 'user-1' });
+      const request = { user: { userId: 'user-1' } };
+
+      const result: unknown = await controller.exportData(
+        'user-1',
+        request as unknown as Parameters<typeof controller.exportData>[1],
+      );
+
+      expect(result).toEqual({ userId: 'user-1' });
+      expect(mockUsersService.exportUserData).toHaveBeenCalledWith(
+        'user-1',
+        'user-1',
+      );
+    });
+  });
+
+  describe('remove', () => {
+    it('passes the authenticated user id to the delete service', async () => {
+      mockUsersService.remove.mockResolvedValue({
+        userId: 'user-1',
+        deletedAt: new Date(),
+      });
+      const request = { user: { userId: 'user-1' } };
+
+      await controller.remove(
+        'user-1',
+        request as unknown as Parameters<typeof controller.remove>[1],
+      );
+
+      expect(mockUsersService.remove).toHaveBeenCalledWith('user-1', 'user-1');
     });
   });
 });

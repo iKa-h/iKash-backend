@@ -40,4 +40,18 @@ export class UsersRepository extends BaseRepository {
     const found = await this.prisma.appUser.findUnique({ where: { alias } });
     return found === null;
   }
+
+  findExportData(userId: string) {
+    return this.prisma.appUser.findUnique({
+      where: { userId },
+      include: {
+        paymentMethods: true,
+        auditLogs: true,
+        offers: true,
+        buyOrders: true,
+        sellOrders: true,
+        chatMessages: true,
+      },
+    });
+  }
 }

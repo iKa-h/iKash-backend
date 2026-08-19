@@ -14,7 +14,7 @@ model AppUser {
   alias                String?          @unique @map("alias")
   username             String?          @map("username")
   kycStatus            kyc_status       @default(pending) @map("kyc_status")
-  role                 app_role         @default(USER) @map("role")
+  role                 app_role         @default(user) @map("role")
   kycUpdatedAt         DateTime?        @map("kyc_updated_at") @db.Timestamptz(6)
   totalVolume          Decimal          @default(0) @map("total_volume") @db.Decimal(20, 7)
   createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -26,6 +26,7 @@ model AppUser {
   preferredCurrency    String?          @map("preferred_currency")
   bio                  String?         @map("bio")
   securityUpdates      Boolean         @default(true) @map("security_updates")
+  deletedAt            DateTime?       @map("deleted_at") @db.Timestamptz(6)
   chatMessages         ChatMessage[]
   offers               Offer[]         @relation("UserOffers")
   buyOrders            Order[]         @relation("BuyerOrders")
@@ -237,6 +238,7 @@ model Waitlist {
 
 
 enum app_role {
-  USER
-  ADMIN
+  user
+  admin
+  support
 }

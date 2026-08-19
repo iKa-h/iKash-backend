@@ -5,35 +5,72 @@ import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 describe('UsersService', () => {
   let service: UsersService;
   let repo: {
     update: jest.Mock;
     findById: jest.Mock;
+    findExportData: jest.Mock;
   };
   let mockFileStorageService: {
     uploadFile: jest.Mock;
+  };
+  let mockPrismaService: {
+    waitlist: { findUnique: jest.Mock; deleteMany: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  let mockAuditLogService: {
+    create: jest.Mock;
+  };
+  let txClient: {
+    paymentMethod: { deleteMany: jest.Mock };
+    chatMessage: { updateMany: jest.Mock };
+    auditLog: { updateMany: jest.Mock };
+    waitlist: { deleteMany: jest.Mock };
+    appUser: { update: jest.Mock };
   };
 
   beforeEach(async () => {
     repo = {
       update: jest.fn(),
       findById: jest.fn(),
+      findExportData: jest.fn(),
     };
 
     mockFileStorageService = {
       uploadFile: jest.fn(),
     };
 
+    txClient = {
+      paymentMethod: { deleteMany: jest.fn() },
+      chatMessage: { updateMany: jest.fn() },
+      auditLog: { updateMany: jest.fn() },
+      waitlist: { deleteMany: jest.fn() },
+      appUser: { update: jest.fn() },
+    };
+
+    mockPrismaService = {
+      waitlist: { findUnique: jest.fn(), deleteMany: jest.fn() },
+      $transaction: jest.fn((cb: (tx: typeof txClient) => unknown) =>
+        cb(txClient),
+      ),
+    };
+
+    mockAuditLogService = {
+      create: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: UsersRepository, useValue: repo },
-        { provide: PrismaService, useValue: {} },
+        { provide: PrismaService, useValue: mockPrismaService },
         { provide: AuthService, useValue: {} },
         { provide: FileStorageService, useValue: mockFileStorageService },
         { provide: PaymentMethodValidatorService, useValue: {} },
+        { provide: AuditLogService, useValue: mockAuditLogService },
       ],
     }).compile();
 
@@ -156,6 +193,129 @@ describe('UsersService', () => {
       expect(mockFileStorageService.uploadFile).toHaveBeenCalledWith(mockFile);
       expect(repo.update).not.toHaveBeenCalled();
       expect(result.profileImageUrl).toBe(mockStoredFile.url);
+    });
+  });
+
+  describe('exportUserData', () => {
+    it("rejects a caller exporting another user's data", async () => {
+      await expect(
+        service.exportUserData('user-1', 'user-2'),
+      ).rejects.toThrow();
+      expect(repo.findExportData).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unauthenticated export request', async () => {
+      await expect(service.exportUserData('user-1')).rejects.toThrow();
+      expect(repo.findExportData).not.toHaveBeenCalled();
+    });
+
+    it('throws when the user does not exist', async () => {
+      repo.findExportData.mockResolvedValue(null);
+
+      await expect(
+        service.exportUserData('user-1', 'user-1'),
+      ).rejects.toThrow();
+    });
+
+    it('returns the profile plus linked data and a matching waitlist row', async () => {
+      const exportRecord = {
+        userId: 'user-1',
+        email: 'user@example.com',
+        paymentMethods: [{ paymentId: 'pm-1' }],
+        auditLogs: [{ id: 'log-1' }],
+        offers: [],
+        buyOrders: [],
+        sellOrders: [],
+        chatMessages: [],
+      };
+      repo.findExportData.mockResolvedValue(exportRecord);
+      mockPrismaService.waitlist.findUnique.mockResolvedValue({
+        id: 'wl-1',
+        email: 'user@example.com',
+      });
+
+      const result = await service.exportUserData('user-1', 'user-1');
+
+      expect(mockPrismaService.waitlist.findUnique).toHaveBeenCalledWith({
+        where: { email: 'user@example.com' },
+      });
+      expect(result).toMatchObject({
+        ...exportRecord,
+        waitlist: { id: 'wl-1', email: 'user@example.com' },
+      });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ resourceId: 'user-1' }),
+      );
+    });
+
+    it('skips the waitlist lookup when the user has no email on file', async () => {
+      repo.findExportData.mockResolvedValue({ userId: 'user-1', email: null });
+
+      const result = await service.exportUserData('user-1', 'user-1');
+
+      expect(mockPrismaService.waitlist.findUnique).not.toHaveBeenCalled();
+      expect(result.waitlist).toBeNull();
+    });
+  });
+
+  describe('remove', () => {
+    it("rejects a caller deleting another user's account", async () => {
+      await expect(service.remove('user-1', 'user-2')).rejects.toThrow();
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws when the user does not exist', async () => {
+      repo.findById.mockResolvedValue(null);
+
+      await expect(service.remove('user-1', 'user-1')).rejects.toThrow();
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('anonymizes linked PII and marks the account deleted instead of hard-deleting it', async () => {
+      repo.findById.mockResolvedValue({
+        userId: 'user-1',
+        email: 'user@example.com',
+      });
+      txClient.appUser.update.mockResolvedValue({
+        userId: 'user-1',
+        email: null,
+        deletedAt: new Date(),
+      });
+
+      const result = await service.remove('user-1', 'user-1');
+
+      expect(txClient.paymentMethod.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect(txClient.chatMessage.updateMany).toHaveBeenCalledWith({
+        where: { senderId: 'user-1' },
+        data: { content: '[deleted]' },
+      });
+      expect(txClient.auditLog.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        data: { ipAddress: null, userAgent: null },
+      });
+      expect(txClient.waitlist.deleteMany).toHaveBeenCalledWith({
+        where: { email: 'user@example.com' },
+      });
+      const updateCall = txClient.appUser.update.mock.calls[0] as [
+        { where: { userId: string }; data: Record<string, unknown> },
+      ];
+      expect(updateCall[0].where).toEqual({ userId: 'user-1' });
+      expect(updateCall[0].data).toMatchObject({ email: null, alias: null });
+      expect(result.email).toBeNull();
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ resourceId: 'user-1' }),
+      );
+    });
+
+    it('skips the waitlist cleanup when the user has no email on file', async () => {
+      repo.findById.mockResolvedValue({ userId: 'user-1', email: null });
+      txClient.appUser.update.mockResolvedValue({ userId: 'user-1' });
+
+      await service.remove('user-1', 'user-1');
+
+      expect(txClient.waitlist.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { AuthChallengeCron } from './auth-challenge.cron';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { AuthRateLimitGuard } from './auth-rate-limit.guard';
       signOptions: { expiresIn: '1h' },
     }),
   ],
-  providers: [AuthService, JwtStrategy, AuthRateLimitGuard],
+  providers: [AuthService, JwtStrategy, AuthRateLimitGuard, AuthChallengeCron],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],
 })

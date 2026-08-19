@@ -14,6 +14,8 @@ import {
 import { AppException, ErrorCode } from '../../common/errors';
 import { AppUser, Waitlist } from '@prisma/client';
 import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResult } from '../audit-log/enums/audit-action.enum';
 
 export interface AliasAvailability {
   available: boolean;
@@ -37,6 +39,7 @@ export class UsersService {
     private readonly authService: AuthService,
     private readonly fileStorageService: FileStorageService,
     private readonly paymentMethodValidator: PaymentMethodValidatorService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async getOrCreateAccount(publicKey: string): Promise<AppUser> {
@@ -228,7 +231,98 @@ export class UsersService {
     }) as Promise<AppUser>;
   }
 
-  remove(id: string): Promise<AppUser> {
-    return this.repo.delete(id) as Promise<AppUser>;
+  /**
+   * Returns the caller's own personal data footprint: profile fields plus
+   * everything linked to them (payment methods, audit logs, offers,
+   * orders, chat messages, and a matching waitlist entry if any).
+   */
+  async exportUserData(
+    id: string,
+    callerUserId?: string,
+  ): Promise<Record<string, unknown>> {
+    if (!callerUserId || callerUserId !== id) {
+      throw new AppException(
+        ErrorCode.UNAUTHORIZED_ACTION,
+        'You can only export your own data.',
+      );
+    }
+
+    const user = await this.repo.findExportData(id);
+    if (!user) {
+      throw new AppException(ErrorCode.USER_NOT_FOUND, `User ${id} not found`);
+    }
+
+    const waitlist = user.email
+      ? await this.prisma.waitlist.findUnique({ where: { email: user.email } })
+      : null;
+
+    await this.auditLogService.create({
+      action: AuditAction.USER_DATA_EXPORTED,
+      resourceType: 'User',
+      resourceId: id,
+      result: AuditResult.SUCCESS,
+    });
+
+    return { ...user, waitlist };
+  }
+
+  /**
+   * Erases/anonymizes the caller's PII instead of hard-deleting the
+   * AppUser row, so historical orders/offers/escrows the account is party
+   * to stay intact and no FK constraint is violated. Payment methods are
+   * removed outright, sent chat message content is scrubbed, audit log
+   * entries lose their IP/user-agent, and a matching waitlist row (if any)
+   * is removed. Idempotent: re-running on an already-deleted account is a
+   * safe no-op past the first call.
+   */
+  async remove(id: string, callerUserId?: string): Promise<AppUser> {
+    if (!callerUserId || callerUserId !== id) {
+      throw new AppException(
+        ErrorCode.UNAUTHORIZED_ACTION,
+        'You can only delete your own account.',
+      );
+    }
+
+    const user = (await this.repo.findById(id)) as AppUser | null;
+    if (!user) {
+      throw new AppException(ErrorCode.USER_NOT_FOUND, `User ${id} not found`);
+    }
+
+    const anonymized = await this.prisma.$transaction(async (tx) => {
+      await tx.paymentMethod.deleteMany({ where: { userId: id } });
+      await tx.chatMessage.updateMany({
+        where: { senderId: id },
+        data: { content: '[deleted]' },
+      });
+      await tx.auditLog.updateMany({
+        where: { userId: id },
+        data: { ipAddress: null, userAgent: null },
+      });
+      if (user.email) {
+        await tx.waitlist.deleteMany({ where: { email: user.email } });
+      }
+      return tx.appUser.update({
+        where: { userId: id },
+        data: {
+          email: null,
+          username: null,
+          alias: null,
+          bio: null,
+          profileImageUrl: null,
+          currentNonce: null,
+          preferredCurrency: null,
+          deletedAt: new Date(),
+        },
+      });
+    });
+
+    await this.auditLogService.create({
+      action: AuditAction.USER_DATA_DELETED,
+      resourceType: 'User',
+      resourceId: id,
+      result: AuditResult.SUCCESS,
+    });
+
+    return anonymized;
   }
 }
