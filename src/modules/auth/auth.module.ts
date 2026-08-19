@@ -8,6 +8,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { getJwtSecret } from '../../config/jwt.config';
+import { AuthChallengeCron } from './auth-challenge.cron';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { getJwtSecret } from '../../config/jwt.config';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, AuthRateLimitGuard],
+  providers: [AuthService, JwtStrategy, AuthRateLimitGuard, AuthChallengeCron],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],
 })

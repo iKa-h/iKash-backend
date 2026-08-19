@@ -22,12 +22,15 @@ import { PaymentProvidersModule } from './modules/payment-providers/payment-prov
 import { SendModule } from './modules/send/send.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { HealthModule } from './modules/health/health.module';
+import { EnvValidationService } from './common/services/env-validation.service';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    HealthModule,
     UsersModule,
     OfferModule,
     PaymentMethodsModule,
@@ -66,6 +69,7 @@ import { AuditLogModule } from './modules/audit-log/audit-log.module';
       provide: APP_GUARD,
       useClass: CsrfGuard,
     },
+    EnvValidationService,
   ],
 })
 export class AppModule {}

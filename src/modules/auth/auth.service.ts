@@ -247,4 +247,27 @@ export class AuthService {
     }
     return Math.floor(parsed);
   }
+
+  async purgeExpiredChallenges(
+    retentionHours = 24,
+  ): Promise<{ count: number }> {
+    const now = new Date();
+    const usedThreshold = new Date(
+      now.getTime() - retentionHours * 60 * 60 * 1000,
+    );
+
+    const result = await this.prisma.authChallenge.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          {
+            AND: [{ usedAt: { not: null } }, { usedAt: { lt: usedThreshold } }],
+          },
+        ],
+      },
+    });
+
+    this.logger.log(`Purged ${result.count} expired/stale auth challenges`);
+    return result;
+  }
 }
