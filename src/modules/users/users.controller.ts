@@ -149,8 +149,15 @@ export class UsersController {
     return this.service.uploadProfilePicture(id, file, parsedSnapshot);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/data')
+  exportData(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.service.exportUserData(id, req.user?.userId ?? req.user?.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.service.remove(id, req.user?.userId ?? req.user?.id);
   }
 }
