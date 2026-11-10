@@ -160,6 +160,7 @@ describe('AuthController', () => {
     it('should pass dto and request context to authService.login', async () => {
       const dto = {
         publicKey: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+        challenge: 'challenge-string',
         signature: 'valid-signature',
       };
       const mockReq = {
