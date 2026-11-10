@@ -38,10 +38,12 @@ services:
         condition: service_started
     environment:
       NODE_ENV: development
+      # Cloud Run inyecta PORT=8080; en compose lo fijamos manualmente
+      PORT: '8080'
       # dummy env según .env.example — para desarrollo local primitivo
       DATABASE_URL: postgresql://ikash:ikash@db:5432/ikash
       DIRECT_URL: postgresql://ikash:ikash@db:5432/ikash
-      JWT_SECRET: ikash-local-dev-jwt-secret
+      JWT_SECRET: ikash-local-dev-jwt-secret-0123456789abcdef
       STELLAR_HORIZON_URL: https://horizon-testnet.stellar.org
       STELLAR_RPC_URL: https://soroban-testnet.stellar.org
       STELLAR_NETWORK: testnet
@@ -72,7 +74,7 @@ services:
       NODE_ENV: test
       DATABASE_URL: postgresql://ikash:ikash@db:5432/ikash
       DIRECT_URL: postgresql://ikash:ikash@db:5432/ikash
-      JWT_SECRET: ikash-local-test-jwt-secret
+      JWT_SECRET: ikash-local-test-jwt-secret-0123456789abc
       STORAGE_PROVIDER: mock
     profiles: [dev-test]
 
