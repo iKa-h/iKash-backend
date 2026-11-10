@@ -6,8 +6,8 @@
  * Key facts:
  *
  *  1. ROLES — The `roles` object only includes keys accepted by the TW API
- *     multi-release schema: approver, serviceProvider, platformAddress,
- *     releaseSigner, disputeResolver.
+ *     single-release schema: approver, serviceProvider, platformAddress,
+ *     releaseSigner, disputeResolver, receiver.
  *
  *  2. TRUSTLINE — For non-USDC assets (XLM/native), the trustline uses the
  *     Soroban SAC contract address instead of an empty string.
@@ -31,8 +31,8 @@ import { SyncEscrowDto, EscrowAction } from './dto/sync-escrow.dto';
 import { EscrowRepository } from './escrow.repository';
 import { TrustlessWorkService } from './trustless-work.service';
 import {
-  InitializeMultiReleaseEscrowPayload,
-  MultiReleaseRoles,
+  InitializeSingleReleaseEscrowPayload,
+  SingleReleaseRoles,
   Trustline,
 } from './trustless-work.types';
 import { EscrowOnChain, escrow_status } from '@prisma/client';
@@ -106,7 +106,7 @@ export class EscrowService {
   }
 
   /**
-   * Builds the `roles` object accepted by the TW multi-release deployer.
+   * Builds the `roles` object accepted by the TW single-release deployer.
    *
    * P2P mapping:
    *   approver        → treasury (auto-approves after buyer confirms fiat)
@@ -114,11 +114,12 @@ export class EscrowService {
    *   platformAddress → treasury
    *   releaseSigner   → seller  (releases once fiat is received)
    *   disputeResolver → support
+   *   receiver        → buyer   (receives proceeds on release)
    */
   private buildP2PRoles(
     sellerAddress: string,
     buyerAddress: string,
-  ): MultiReleaseRoles {
+  ): SingleReleaseRoles {
     const treasury = this.config.getOrThrow<string>('IKASH_TREASURY_ADDRESS');
     const support = this.config.getOrThrow<string>('IKASH_SUPPORT_ADDRESS');
 
@@ -128,6 +129,7 @@ export class EscrowService {
       platformAddress: treasury,
       releaseSigner: sellerAddress,
       disputeResolver: support,
+      receiver: buyerAddress,
     };
   }
 
@@ -194,18 +196,19 @@ export class EscrowService {
       this.config.get<string>('IKASH_PLATFORM_FEE', '1'),
     );
 
-    const deployPayload: InitializeMultiReleaseEscrowPayload = {
+    const deployPayload: InitializeSingleReleaseEscrowPayload = {
       signer: treasury,
       engagementId: orderId,
       title: dto.title ?? `iKash P2P Order ${orderId}`,
       description: `iKash P2P escrow for order ${orderId}`,
       roles: this.buildP2PRoles(dto.sellerAddress, dto.buyerAddress),
+      amount: Number(dto.amount),
       platformFee,
+      // Single-release deployer only accepts milestones' descriptions:
+      // amount lives at the escrow level and the release goes to `receiver`.
       milestones: [
         {
           description: 'P2P fiat-to-crypto exchange',
-          amount: Number(dto.amount),
-          receiver: dto.buyerAddress,
         },
       ],
       trustline: this.resolveTrustline(dto.assetCode),
@@ -303,18 +306,19 @@ export class EscrowService {
       this.config.get<string>('IKASH_PLATFORM_FEE', '1'),
     );
 
-    const payload: InitializeMultiReleaseEscrowPayload = {
+    const payload: InitializeSingleReleaseEscrowPayload = {
       signer: dto.signerAddress,
       engagementId: dto.orderId,
       title: dto.title,
       description: `iKash P2P escrow for order ${dto.orderId}`,
       roles: this.buildP2PRoles(dto.sellerAddress, dto.buyerAddress),
+      amount: Number(dto.amount),
       platformFee,
+      // Single-release deployer only accepts milestones' descriptions:
+      // amount lives at the escrow level and the release goes to `receiver`.
       milestones: [
         {
           description: 'P2P fiat-to-crypto exchange',
-          amount: Number(dto.amount),
-          receiver: dto.buyerAddress,
         },
       ],
       trustline: this.resolveTrustline(dto.assetCode),
@@ -495,10 +499,9 @@ export class EscrowService {
       }
     }
 
-    const result = await this.tw.releaseMilestoneFunds({
+    const result = await this.tw.releaseFunds({
       contractId: escrow.contractId,
       releaseSigner: dto.releaseSigner,
-      milestoneIndex: '0',
     });
 
     return {
