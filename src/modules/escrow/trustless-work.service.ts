@@ -5,10 +5,12 @@
  *
  * Changes from the original version:
  *  - All payloads now use the canonical types from trustless-work.types.ts
+ *  - All routes target the V1 SINGLE-RELEASE endpoints
+ *    (/deployer/single-release, /escrow/single-release/…)
  *  - `roles` is a plain object with the exact keys the API expects
  *    (no `client` key — that field does not exist in the TW schema)
  *  - `trustline` is always an object { address, symbol }; never null/undefined
- *  - `initializeEscrow` param type now enforces `MultiReleaseRoles` directly,
+ *  - `initializeEscrow` param type now enforces `SingleReleaseRoles` directly,
  *    eliminating the `Record<string, string>` footgun
  *  - Response types are explicit instead of `any`
  *
@@ -22,11 +24,11 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { AppException, ErrorCode } from '../../common/errors';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import {
-  InitializeMultiReleaseEscrowPayload,
+  InitializeSingleReleaseEscrowPayload,
   FundEscrowPayload,
   ChangeMilestoneStatusPayload,
   ApproveMilestonePayload,
-  ReleaseMilestoneFundsPayload,
+  ReleaseFundsPayload,
   UnsignedTransactionResponse,
   SendTransactionResponse,
   EscrowIndexerEntry,
@@ -66,22 +68,23 @@ export class TrustlessWorkService {
   // ─── Deploy ────────────────────────────────────────────────────────────────
 
   /**
-   * POST /deployer/multi-release
+   * POST /deployer/single-release
    *
-   * Builds an unsigned XDR that deploys a new multi-release escrow contract.
+   * Builds an unsigned XDR that deploys a new SINGLE-RELEASE escrow contract.
    * The caller must sign and broadcast via sendTransaction().
    *
    * API required fields: signer, engagementId, title, description,
-   *                       roles, platformFee, milestones, trustline
+   *                       roles, amount, platformFee, milestones, trustline
    *
    * Roles must be a plain object — never an array or a Record<string,string>.
-   * Valid keys: approver, serviceProvider, platformAddress, releaseSigner, disputeResolver
+   * Valid keys: approver, serviceProvider, platformAddress, releaseSigner,
+   *             disputeResolver, receiver
    *
    * Trustline must be { address: string, symbol: string } — never null.
    * For native XLM use { address: '', symbol: 'XLM' }.
    */
   async initializeEscrow(
-    payload: InitializeMultiReleaseEscrowPayload,
+    payload: InitializeSingleReleaseEscrowPayload,
   ): Promise<UnsignedTransactionResponse> {
     const assetSymbol = payload.trustline?.symbol?.toUpperCase();
     if (assetSymbol !== 'USDC') {
@@ -91,7 +94,7 @@ export class TrustlessWorkService {
       );
     }
     return this.post<UnsignedTransactionResponse>(
-      '/deployer/multi-release',
+      '/deployer/single-release',
       payload,
     );
   }
@@ -99,16 +102,16 @@ export class TrustlessWorkService {
   // ─── Fund ──────────────────────────────────────────────────────────────────
 
   /**
-   * POST /escrow/multi-release/fund-escrow
+   * POST /escrow/single-release/fund-escrow
    *
    * Builds an unsigned XDR for the seller to fund the escrow.
-   * `amount` should equal the sum of all milestone amounts.
+   * `amount` must equal the single-release escrow amount.
    */
   async fundEscrow(
     payload: FundEscrowPayload,
   ): Promise<UnsignedTransactionResponse> {
     return this.post<UnsignedTransactionResponse>(
-      '/escrow/multi-release/fund-escrow',
+      '/escrow/single-release/fund-escrow',
       payload,
     );
   }
@@ -116,7 +119,7 @@ export class TrustlessWorkService {
   // ─── Milestone ─────────────────────────────────────────────────────────────
 
   /**
-   * POST /escrow/multi-release/change-milestone-status
+   * POST /escrow/single-release/change-milestone-status
    *
    * Service provider marks a milestone as completed and attaches evidence.
    * `newEvidence` is required by the API schema (use a placeholder if not applicable).
@@ -125,36 +128,37 @@ export class TrustlessWorkService {
     payload: ChangeMilestoneStatusPayload,
   ): Promise<UnsignedTransactionResponse> {
     return this.post<UnsignedTransactionResponse>(
-      '/escrow/multi-release/change-milestone-status',
+      '/escrow/single-release/change-milestone-status',
       payload,
     );
   }
 
   /**
-   * POST /escrow/multi-release/approve-milestone
+   * POST /escrow/single-release/approve-milestone
    *
    * Approver validates completed milestone work.
-   * Must be called before releaseMilestoneFunds when milestone status is 'completed'.
+   * Must be called before releaseFunds when milestone status is 'completed'.
    */
   async approveMilestone(
     payload: ApproveMilestonePayload,
   ): Promise<UnsignedTransactionResponse> {
     return this.post<UnsignedTransactionResponse>(
-      '/escrow/multi-release/approve-milestone',
+      '/escrow/single-release/approve-milestone',
       payload,
     );
   }
 
   /**
-   * POST /escrow/multi-release/release-milestone-funds
+   * POST /escrow/single-release/release-funds
    *
-   * Releases funds for an approved milestone to the milestone's receiver address.
+   * Releases the FULL escrow amount to the configured receiver — single-release
+   * has no milestone index: one settlement, net of fees.
    */
-  async releaseMilestoneFunds(
-    payload: ReleaseMilestoneFundsPayload,
+  async releaseFunds(
+    payload: ReleaseFundsPayload,
   ): Promise<UnsignedTransactionResponse> {
     return this.post<UnsignedTransactionResponse>(
-      '/escrow/multi-release/release-milestone-funds',
+      '/escrow/single-release/release-funds',
       payload,
     );
   }
