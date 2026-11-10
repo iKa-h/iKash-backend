@@ -1,8 +1,10 @@
 /**
  * trustless-work.types.ts
  *
- * Canonical types extracted from the Trustless Work API documentation.
- * Source: https://docs.trustlesswork.com/trustless-work/introduction/developer-resources/types
+ * Canonical types for the Trustless Work **V1 single-release** REST API.
+ * Source: https://docs.trustlesswork.com/trustless-work/api-rest/deploy
+ *         (section "Single Release Escrow" — routes under /deployer/single-release
+ *          and /escrow/single-release/…)
  *
  * These replace the ad-hoc inline objects in the original TrustlessWorkService
  * and are the single source of truth for all payloads sent to the TW REST API.
@@ -14,7 +16,7 @@
 
 // ─── Primitives ────────────────────────────────────────────────────────────────
 
-export type EscrowType = 'single-release' | 'multi-release';
+export type EscrowType = 'single-release';
 export type SingleReleaseEscrowStatus =
   | 'pending'
   | 'active'
@@ -26,12 +28,22 @@ export type Status = 'SUCCESS' | 'ERROR' | 'PENDING';
 // ─── Shared sub-types ──────────────────────────────────────────────────────────
 
 /**
- * Roles object for a multi-release escrow.
- * `receiver` lives at the milestone level in multi-release, so it is omitted here.
+ * Roles object for a single-release escrow (V1 schema).
+ * In single-release, `amount` and `receiver` live at the ESCROW level, so the
+ * role list includes `receiver` explicitly (unlike multi-release, where the
+ * receiver moves down to each milestone).
+ *
+ * P2P mapping (iKash):
+ *   approver        → treasury (auto-approves after buyer confirms fiat)
+ *   serviceProvider → buyer    (provides the fiat "service")
+ *   platformAddress → treasury
+ *   releaseSigner   → seller   (releases once fiat is received)
+ *   disputeResolver → support
+ *   receiver        → buyer    (where escrow proceeds are sent on release)
  *
  * Field names must match the API exactly — any unknown key causes a 400 "Validation failed".
  */
-export type MultiReleaseRoles = {
+export type SingleReleaseRoles = {
   /** Verifies and approves each milestone before funds are released. */
   approver: string;
   /** Performs the work and changes milestone status to 'completed'. */
@@ -42,6 +54,8 @@ export type MultiReleaseRoles = {
   releaseSigner: string;
   /** Resolves disputes when raised. */
   disputeResolver: string;
+  /** Address where escrow proceeds are sent upon release. */
+  receiver: string;
 };
 
 /**
@@ -65,20 +79,21 @@ export type Flags = {
 
 // ─── Milestone types ───────────────────────────────────────────────────────────
 
-/** Payload for each milestone when initializing a multi-release escrow. */
-export type MultiReleaseMilestonePayload = {
+/**
+ * Payload for each milestone when initializing a single-release escrow.
+ * V1 only accepts `description` (+ optional initial status) in the deploy
+ * body — `amount` is escrow-level and `approvedFlag`/`status` are defaulted
+ * by the contract, so they must NOT be sent.
+ */
+export type SingleReleaseMilestonePayload = {
   /** Human-readable description of this milestone. */
   description: string;
-  /** Amount in the token's base unit (e.g. USDC with 7 decimals on Stellar). */
-  amount: number;
-  /** Address that receives the funds when this milestone is released. */
-  receiver: string;
   /** Optional initial status. Omit to let the contract default to empty. */
   status?: string;
 };
 
 /** Full on-chain milestone shape (returned by indexer queries). */
-export type MultiReleaseMilestone = MultiReleaseMilestonePayload & {
+export type SingleReleaseMilestone = SingleReleaseMilestonePayload & {
   evidence?: string;
   flags?: Flags;
 };
@@ -86,15 +101,16 @@ export type MultiReleaseMilestone = MultiReleaseMilestonePayload & {
 // ─── Initialize Escrow ─────────────────────────────────────────────────────────
 
 /**
- * Payload for POST /deployer/multi-release
+ * Payload for POST /deployer/single-release
  *
  * Required fields enforced by the API:
- *   signer, engagementId, title, description, roles, platformFee, milestones, trustline
+ *   signer, engagementId, title, description, roles, amount, platformFee,
+ *   milestones, trustline
  *
  * IMPORTANT: `roles` must not contain a `client` key — that field does not exist
  * in the TW API schema and will trigger "Validation failed".
  */
-export type InitializeMultiReleaseEscrowPayload = {
+export type InitializeSingleReleaseEscrowPayload = {
   /** Stellar address that signs the deploy transaction (typically your treasury). */
   signer: string;
   /** Stable identifier your platform uses to correlate this escrow (e.g. orderId). */
@@ -104,11 +120,13 @@ export type InitializeMultiReleaseEscrowPayload = {
   /** Longer description of what this escrow covers. */
   description: string;
   /** Role assignments — must be a plain object, NOT an array. */
-  roles: MultiReleaseRoles;
+  roles: SingleReleaseRoles;
+  /** Full protected amount released once (matched by fundEscrow). */
+  amount: number;
   /** Platform fee percentage (1 = 1%). Cannot exceed 99. */
   platformFee: number;
-  /** At least one milestone required; max 50. */
-  milestones: MultiReleaseMilestonePayload[];
+  /** At least one milestone required; max 50. Description only. */
+  milestones: SingleReleaseMilestonePayload[];
   /**
    * Trustline for the token used in this escrow.
    * Use `{ address: '', symbol: 'XLM' }` for native XLM — never null/undefined.
@@ -118,19 +136,19 @@ export type InitializeMultiReleaseEscrowPayload = {
 
 // ─── Fund Escrow ───────────────────────────────────────────────────────────────
 
-/** Payload for POST /escrow/multi-release/fund-escrow */
+/** Payload for POST /escrow/single-release/fund-escrow */
 export type FundEscrowPayload = {
   /** Deployed contract address returned after initialize. */
   contractId: string;
   /** Address of the user signing (and funding) the transaction. */
   signer: string;
-  /** Amount to deposit — must match the sum of milestone amounts. */
+  /** Amount to deposit — must equal the escrow amount. */
   amount: number;
 };
 
 // ─── Change Milestone Status ───────────────────────────────────────────────────
 
-/** Payload for POST /escrow/multi-release/change-milestone-status */
+/** Payload for POST /escrow/single-release/change-milestone-status */
 export type ChangeMilestoneStatusPayload = {
   contractId: string;
   /** Zero-based index as a string, e.g. '0'. */
@@ -145,7 +163,7 @@ export type ChangeMilestoneStatusPayload = {
 
 // ─── Approve Milestone ─────────────────────────────────────────────────────────
 
-/** Payload for POST /escrow/multi-release/approve-milestone */
+/** Payload for POST /escrow/single-release/approve-milestone */
 export type ApproveMilestonePayload = {
   contractId: string;
   milestoneIndex: string;
@@ -153,14 +171,18 @@ export type ApproveMilestonePayload = {
   approver: string;
 };
 
-// ─── Release Milestone Funds ───────────────────────────────────────────────────
+// ─── Release Funds ─────────────────────────────────────────────────────────────
 
-/** Payload for POST /escrow/multi-release/release-milestone-funds */
-export type ReleaseMilestoneFundsPayload = {
+/**
+ * Payload for POST /escrow/single-release/release-funds
+ *
+ * Single-release has NO milestone index: one call releases the full protected
+ * amount to the configured `receiver` (net of fees).
+ */
+export type ReleaseFundsPayload = {
   contractId: string;
   /** Must match the releaseSigner role set at initialize time. */
   releaseSigner: string;
-  milestoneIndex: string;
 };
 
 // ─── Send Transaction ──────────────────────────────────────────────────────────
@@ -193,17 +215,17 @@ export type SendTransactionResponse = {
   escrow?: unknown;
 };
 
-/** Shape returned by the indexer for a multi-release escrow. */
+/** Shape returned by the indexer for a single-release escrow. */
 export type EscrowIndexerEntry = {
   signer?: string;
   contractId?: string;
   engagementId: string;
   title: string;
-  roles: MultiReleaseRoles;
+  roles: SingleReleaseRoles;
   description: string;
   platformFee: number;
   balance?: number;
-  milestones: MultiReleaseMilestone[];
+  milestones: SingleReleaseMilestone[];
   flags?: Flags;
   trustline: Trustline & { name: string };
   isActive?: boolean;
