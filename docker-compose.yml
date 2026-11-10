@@ -7,5 +7,74 @@ services:
       - ./storage-data:/data
     command:
       - -scheme=http
-      - -port=4443
       - -public-host=localhost:4443
+      - -port=4443
+
+  # ─── Base de datos (PostgreSQL) ───────────────────────────────────────────
+  # Puerto host 5433 para no chocar con otras instancias locales de Postgres.
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ikash
+      POSTGRES_PASSWORD: ikash
+      POSTGRES_DB: ikash
+    ports:
+      - '5433:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ikash -d ikash']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── API backend (NestJS) ────────────────────────────────────────────────
+  backend:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      # dummy env según .env.example — para desarrollo local primitivo
+      DATABASE_URL: postgresql://ikash:ikash@db:5432/ikash
+      DIRECT_URL: postgresql://ikash:ikash@db:5432/ikash
+      JWT_SECRET: ikash-local-dev-jwt-secret
+      STELLAR_HORIZON_URL: https://horizon-testnet.stellar.org
+      STELLAR_RPC_URL: https://soroban-testnet.stellar.org
+      STELLAR_NETWORK: testnet
+      STELLAR_SIGNER_SECRET: SDQFDDSOBSY7FDDVCJQL47552CCOQOOJBPIRVVFLZYS3HGJX4ALYJRQ4
+      STELLAR_LISTENER_POLL_INTERVAL_MS: '5000'
+      TRUSTLESS_WORK_API_URL: https://dev.api.trustlesswork.com
+      TRUSTLESS_WORK_API_KEY: ikash-local-dev-tw-api-key
+      TRUSTLESS_WORK_USDC_ISSUER: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+      TRUSTLESS_WORK_CONTRACT_ID: ''
+      DIDIT_API_KEY: ikash-local-dev-didit-key
+      DIDIT_WEBHOOK_SECRET: ikash-local-dev-didit-webhook-secret
+      DIDIT_API_URL: https://verification.didit.me/v3
+      DIDIT_WORKFLOW_ID: ikash-local-dev-workflow
+      KYC_CALLBACK_URL: http://localhost:3001/dashboard
+    ports:
+      - '3001:8080'
+
+  # ─── Tests unitarios + chequeo de tipos ──────────────────────────────────
+  # Se ejecuta on-demand, no arranca con `docker compose up`:
+  #   docker compose build test
+  #   docker compose run --rm test           # suite jest completa
+  #   docker compose run --rm test npx tsc --noEmit
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ikash:ikash@db:5432/ikash
+      DIRECT_URL: postgresql://ikash:ikash@db:5432/ikash
+      JWT_SECRET: ikash-local-test-jwt-secret
+      STORAGE_PROVIDER: mock
+    profiles: [dev-test]
+
+volumes:
+  db-data:
