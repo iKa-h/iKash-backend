@@ -1,0 +1,34 @@
+# Dockerfile.test
+#
+# Imagen para correr la suite de pruebas unitarias (jest) y el chequeo de
+# tipos (tsc --noEmit) DENTRO de Docker, con un entorno limpio y completo
+# (todas las dependencias de dev instaladas por pnpm).
+#
+#   docker compose build test
+#   docker compose run --rm test           # ejecuta `pnpm test`
+#   docker compose run --rm test npx tsc --noEmit
+#
+FROM node:22-slim
+
+WORKDIR /usr/src/app
+
+# El validador de entorno salta las variables críticas cuando NODE_ENV=test
+ENV NODE_ENV=test
+
+# Instalar pnpm globalmente
+RUN npm install -g pnpm
+
+# Metadatos de dependencias + esquema prisma (requerido por el postinstall:
+# `prisma generate` corre dentro de `pnpm install`)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.json nest-cli.json ./
+COPY prisma ./prisma
+
+# Instalar TODAS las dependencias (prod + dev) para compilar specs y tipos
+RUN pnpm install
+
+# Código fuente, specs e2e y configuración de jest
+COPY src ./src
+COPY test ./test
+
+CMD ["pnpm", "test"]
